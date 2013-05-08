@@ -23,53 +23,6 @@ log = getLogger(__name__)
 SIOCGIFNAME = 0x8910
 SIOCETHTOOL = 0x8946
 
-# def render_device2(device, parents=True):
-#     """
-#     :type device: Device
-#     """
-#     info = {
-#         'attrs': dict(((k, repr(device.attributes.get(k))) for k in device.attributes.iterkeys())),
-#         'driver': device.driver,
-#         'dict': dict(device),
-#         # 'sysname': device.sys_name,
-#         # 'devtype': device.device_type,  # always None. why?
-#         # 'sysnumber': device.sys_number,
-#         # 'type': device.device_type,
-#         # 'links': list(device.device_links),
-#         # 'tags': list(device.tags),
-#     }
-#     if parents:
-#         info['parents'] = dict(enumerate(render_device(qwe, False) for qwe in device.traverse()))
-#     return info
-
-
-# def render_device(device):
-#     """
-#     :type device: Device
-#     """
-#
-#     info = {
-#         'index': device['IFINDEX'],
-#         'vendor': device.get('ID_VENDOR_FROM_DATABASE'),
-#         'model': device.get('ID_MODEL_FROM_DATABASE'),
-#         'bus': device.get('ID_BUS'),
-#         'iface': device['INTERFACE'],
-#         # 'hwaddr?': device.attributes['address'], # NO! current address (not real hwaddr... )
-#         # 'devtype': device.device_type, # wlan, bridge and so on
-#     }
-#     parent = device.find_parent('pci')
-#     if parent is not None:
-#         info['card'] = {
-#             'direct driver': device.parent.driver,
-#             'pci driver': parent.driver,
-#             'pci id': parent.get('PCI_ID'),
-#             'pci slot name': parent.get('PCI_SLOT_NAME'),
-#             'irq': parent.attributes.asint('irq'),
-#         }
-#         # info['parents'] = dict(enumerate(render_device2(qwe, False) for qwe in device.traverse()))
-#     return info
-
-
 # 16 - IFNAMSIZ
 cgifname_struct = struct.Struct('@16si')
 
@@ -95,6 +48,15 @@ def upgrade_subprocess():
 upgrade_subprocess()
 
 
+def render_device(device, show_parents=True):
+    retval = {
+        'attrs': dict(((k, repr(device.attributes.get(k))) for k in device.attributes.iterkeys())),
+        'dict': dict(device),
+    }
+    if show_parents:
+        retval['parents'] = dict(enumerate(render_device(parent, False) for parent in device.traverse()))
+    return retval
+
 class PhysicalEthernet(object):
     def __init__(self, device):
         """
@@ -118,10 +80,7 @@ class PhysicalEthernet(object):
         ])
         # TODO: regexp validate, and also 00:00:00:00:00:00, FF:FF:FF:FF:FF:FF, and also case-sensitivity
         self.permaddr = address.rsplit(None, 1)[-1].upper()
-        self.debug = {
-            'attrs': dict(((k, repr(device.attributes.get(k))) for k in device.attributes.iterkeys())),
-            'dict': dict(device),
-        }
+        self.debug = render_device(device)
 
     @property
     def ifacename(self):
