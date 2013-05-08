@@ -7,56 +7,9 @@ from pyudev.device import Device
 import fcntl
 from tornado.ioloop import IOLoop
 from tornado.platform.auto import set_close_exec
+from networkd.ethernet.device import PhysicalEthernet
 
 log = getLogger(__name__)
-
-
-# def render_device2(device, parents=True):
-#     """
-#     :type device: Device
-#     """
-#     info = {
-#         'attrs': dict(((k, repr(device.attributes.get(k))) for k in device.attributes.iterkeys())),
-#         'driver': device.driver,
-#         'dict': dict(device),
-#         # 'sysname': device.sys_name,
-#         # 'devtype': device.device_type,  # always None. why?
-#         # 'sysnumber': device.sys_number,
-#         # 'type': device.device_type,
-#         # 'links': list(device.device_links),
-#         # 'tags': list(device.tags),
-#     }
-#     if parents:
-#         info['parents'] = dict(enumerate(render_device(qwe, False) for qwe in device.traverse()))
-#     return info
-
-
-def render_device(device):
-    """
-    :type device: Device
-    """
-
-    info = {
-        'index': device['IFINDEX'],
-        'vendor': device.get('ID_VENDOR_FROM_DATABASE'),
-        'model': device.get('ID_MODEL_FROM_DATABASE'),
-        'bus': device.get('ID_BUS'),
-        'iface': device['INTERFACE'],
-        # 'hwaddr?': device.attributes['address'], # NO! current address (not real hwaddr... )
-        'devtype': device.device_type, # wlan, bridge and so on
-    }
-    parent = device.find_parent('pci')
-    if parent is not None:
-        info['card'] = {
-            'direct driver': device.parent.driver,
-            'pci driver': parent.driver,
-            'pci id': parent.get('PCI_ID'),
-            'pci slot name': parent.get('PCI_SLOT_NAME'),
-            'irq': parent.attributes.asint('irq'),
-        }
-        # info['parents'] = dict(enumerate(render_device2(qwe, False) for qwe in device.traverse()))
-    return info
-
 
 # # hack for old udev library that lacks monitor.poll()
 # def get_udev_reader(monitor):
@@ -78,6 +31,7 @@ def render_device(device):
 #                 return
 #             yield device
 #     return udev_event_reader
+
 
 def upgrade_libudev():
     if not hasattr(pyudev.Monitor, 'poll'):
@@ -125,21 +79,32 @@ class DeviceManager(object):
         self.netdevices = dict()  # ifindex => MyDevice
 
         self.udev_version = pyudev.udev_version()
-        log.debug('Working against udev version %r', self.udev_version)
+        log.debug('Working against udev version %d', self.udev_version)
 
-        context = pyudev.Context()
-        self._prepare_background_monitoring(context)
-        self.context = context
+        self.context = pyudev.Context()
+        self._start_background_monitoring()
         self.rescan_devices()
 
     def rescan_devices(self):
-        # do the coldplug...
-        # TODO: detect dead devices and remove them
-        for device in self.context.list_devices(subsystem='net'):
-            self._handle_event(device)
+        olddevices = self.netdevices
+        self.netdevices = dict()
+        try:
+            for device in self.context.list_devices(subsystem='net'):
+                self._handle_device_event(device)
+        except:
+            self.netdevices = olddevices
+            raise
+        newindexes = set(self.netdevices.iterkeys())
+        oldindexes = set(olddevices.iterkeys())
+        added = newindexes - oldindexes
+        removed = oldindexes - newindexes
+        if added:
+            log.debug('Scan: found %d new devices', len(added))
+        if removed:
+            log.debug('Scan: %d devices disappear', len(removed))
 
-    def _prepare_background_monitoring(self, context):
-        monitor = pyudev.Monitor.from_netlink(context, 'udev')
+    def _start_background_monitoring(self):
+        monitor = pyudev.Monitor.from_netlink(self.context, 'udev')
         monitor.filter_by(subsystem='net')
         monitor.start()
 
@@ -150,15 +115,21 @@ class DeviceManager(object):
         fcntl.fcntl(monitor_fileno, fcntl.F_SETFL, fcntl.fcntl(monitor_fileno, fcntl.F_GETFL, 0) | os.O_NONBLOCK)
 
         io_loop = IOLoop.instance()
-        io_loop.add_handler(monitor_fileno, partial(self._handle_udev_event, partial(monitor.poll, 0)), io_loop.READ)
+
+        fd_handler = partial(self._handle_udev_event, partial(monitor.poll, 0))
+        io_loop.add_handler(monitor_fileno, fd_handler, IOLoop.READ | IOLoop.ERROR)
 
     def _handle_udev_event(self, udev_event_reader, fd, events):
-        log.debug('udev event %r %r', fd, events)
-        for device in iter(udev_event_reader, None):
-            self._handle_event(device)
+        if events & IOLoop.READ:
+            log.debug('udev event %r %r', fd, events)
+            for device in iter(udev_event_reader, None):
+                self._handle_device_event(device)
+        if events & IOLoop.ERROR:
+            log.error('Error on monitoring socket. Stopping monitoring')
+            IOLoop.instance().remove_handler(fd)
 
-    def _handle_event(self, device):
-        log.debug('%r %r', device.action, device)
+    def _handle_device_event(self, device):
+        log.debug('Event: %r for %r', device.action, device)
 
         # we will ignore that. Wi will not use interface name at our job (races?)
         # receiving events say that devices always uninitialized.
@@ -175,22 +146,36 @@ class DeviceManager(object):
         ifindex = int(ifindex)
 
         if device.parent is None:
-            log.debug('Skipping device without parent (non-hardware?), %r', device)
+            log.debug('Skipping device without parent (non-hardware), %r', device)
+            return
+
+        devtype = device.device_type
+        if devtype is not None:
+            log.debug('Device %r have type %r, so skipped', device, devtype)
             return
 
         action = device.action
         # TODO: add may appear AFTER coldplug, this is OK (races)
         if (action is None) or (action == u'add'):
-            self.netdevices[ifindex] = render_device(device)
+            self.netdevices[ifindex] = PhysicalEthernet(device)
+            return
 
         if action == u'remove':
             try:
-                del self.netdevices[ifindex]
+                old_eth_device = self.netdevices.pop(ifindex)
             except KeyError:
-                log.exception('Device removal error', device, ifindex)
+                log.exception('Device removal error (no such device). Scheduling full rescan.', device, ifindex)
+                IOLoop.instance().add_callback(self.rescan_devices)
+                return
+            old_eth_device.close()
 
-                # actions: add, None, move, add, remove, change, online, offline
+            # actions: add, None, move, add, remove, change, online, offline
 
-    def get_dev_list(self):
-        return self.netdevices
+    def get_devices(self):
+        # TODO: it is not safe to return generator
+        # if modification event appear during middle of iteration,
+        # modify request will fail
+        return self.netdevices.itervalues()
 
+    def get_device(self, index):
+        return self.netdevices[index]

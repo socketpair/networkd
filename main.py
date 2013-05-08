@@ -14,24 +14,21 @@ periodically send gratuitous arp
 from tornado import options
 from tornado.ioloop import IOLoop
 from tornado.web import Application
-from networkd.handlers.connections import ConnectionsHandler
 from networkd.handlers.devices import DevicesHandler
-from networkd.ethernet.device import PhysicalEthernet
 from networkd.ethernet.devices import DeviceManager
 
 
 def main():
     options.parse_command_line()
+    dm = DeviceManager()
     application = Application([
-        (r"/connections", ConnectionsHandler),
-        (r"/devices", DevicesHandler, dict(ethmanager=DeviceManager())),
+        (r"/devices", DevicesHandler, dict(ethmanager=dm)),
+        (r"/devices/(.*)", DevicesHandler, dict(ethmanager=dm)),
+        (r"/device/([0-9]+)", DevicesHandler, dict(ethmanager=dm)),
+        (r"/device/([0-9]+)/(.*)", DevicesHandler, dict(ethmanager=dm)),
     ])
     application.listen(8888)
     IOLoop.instance().start()
-
-    qwe = PhysicalEthernet(2)
-    qwe.identify()
-    qwe.identify()
 
 
 if __name__ == '__main__':
