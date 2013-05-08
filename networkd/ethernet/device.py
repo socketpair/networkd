@@ -118,7 +118,10 @@ class PhysicalEthernet(object):
         ])
         # TODO: regexp validate, and also 00:00:00:00:00:00, FF:FF:FF:FF:FF:FF, and also case-sensitivity
         self.permaddr = address.rsplit(None, 1)[-1].upper()
-
+        self.debug = {
+            'attrs': dict(((k, repr(device.attributes.get(k))) for k in device.attributes.iterkeys())),
+            'dict': dict(device),
+        }
 
     @property
     def ifacename(self):

@@ -28,6 +28,11 @@ class DevicesHandler(CommonHandler):
                 'slot': device.pci_slot,
                 'irq': device.pci_irq,
             }
+
+        debug = getattr(device, 'debug', None)
+        if debug is not None:
+            dev_descr['debug'] = debug
+
         return dev_descr
 
     def get(self, ifindex=None, action=None):
