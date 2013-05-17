@@ -2,6 +2,18 @@
 from networkd.handlers.common import CommonHandler
 
 
+def _render_device(device1):
+    def rrr(device):
+        for name in dir(device):
+            if name.startswith('_'):
+                continue
+            attr = getattr(device, name)
+            if callable(attr):
+                continue
+            yield (name, attr)
+    return dict(rrr(device1))
+
+
 class DevicesHandler(CommonHandler):
     # noinspection PyMethodOverriding
     def initialize(self, ethmanager):
@@ -11,29 +23,6 @@ class DevicesHandler(CommonHandler):
         super(DevicesHandler, self).initialize()
         self.manager = ethmanager
 
-    def _render_device(self, device):
-        dev_descr = {
-            'index': device.index,
-            'vendor': device.vendor,
-            'model': device.model,
-            'bus': device.bus,
-            'driver_direct': device.driver_direct,
-            'ifacename': device.ifacename,
-            'permaddr': device.permaddr,
-        }
-        if device.bus == 'pci':
-            dev_descr['pci_info'] = {
-                'driver': device.pci_driver,
-                'id': device.pci_id,
-                'slot': device.pci_slot,
-                'irq': device.pci_irq,
-            }
-
-        debug = getattr(device, 'debug', None)
-        if debug is not None:
-            dev_descr['debug'] = debug
-
-        return dev_descr
 
     def get(self, ifindex=None, action=None):
         manager = self.manager
@@ -41,10 +30,10 @@ class DevicesHandler(CommonHandler):
         if ifindex:
             device = manager.get_device(int(ifindex))
             items = {
-                device.index: self._render_device(device)
+                device.index: _render_device(device)
             }
         else:
-            items = dict((device.index, self._render_device(device)) for device in manager.get_devices())
+            items = dict((device.index, _render_device(device)) for device in manager.get_devices())
 
         # if self.get_argument('force', False):
         #     manager.rescan_devices()
