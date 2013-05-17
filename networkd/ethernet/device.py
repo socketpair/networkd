@@ -1,30 +1,37 @@
 # coding=utf-8
 
 """
-list of network devices
-identify devices
-blink LED, report PCI port, report hardware info to user
 event of changes
 bind connection of appropriate type to given devices
-periodically detect ip conflict, mac conflict
-periodically send gratuitous arp
 """
-
-from array import array
-from contextlib import closing
-import fcntl
+from ctypes import c_void_p, cast, byref
 from logging import getLogger
 import socket
-import struct
-import subprocess
+import fcntl
+import prctl
+from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
+from networkd.lowlevel.libc import ifreq, SIOCGIFNAME, SIOCETHTOOL, ETHTOOL_GPERMADDR, ETH_ALEN, ethtool_perm_addr, ETHTOOL_GDRVINFO, ethtool_drvinfo, ethtool_value, ETHTOOL_PHYS_ID, SIGSET, sigfillset, pthread_sigmask, SIG_SETMASK
 
 log = getLogger(__name__)
 
-SIOCGIFNAME = 0x8910
-SIOCETHTOOL = 0x8946
+# 'sysname': device.sys_name,
+# 'devtype': device.device_type,  # always None. why?
+# 'sysnumber': device.sys_number,
+# 'type': device.device_type,
+# 'links': list(device.device_links),
+# 'tags': list(device.tags),
+# 'hwaddr?': device.attributes['address'], # NO! current address (not real hwaddr... )
 
-# 16 - IFNAMSIZ
-cgifname_struct = struct.Struct('@16si')
+
+class SocketForIoctl(socket.SocketType):
+    _instance = None
+
+    def __new__(cls, *args):
+        if cls._instance is None:
+            log.debug('Creating %s instance', cls)
+            cls._instance = super(SocketForIoctl, cls).__new__(cls, *args)
+        return cls._instance
 
 def upgrade_subprocess():
     if hasattr(subprocess, 'check_output'):
@@ -62,6 +69,7 @@ class PhysicalEthernet(object):
         """
         :type device: Device
         """
+        self.sk_fileno = SocketForIoctl().fileno()
         self.index = device.asint('IFINDEX')
 
         #TODO: what if not exists in BD (!)
@@ -89,40 +97,75 @@ class PhysicalEthernet(object):
             usb_device = device.find_parent('usb')
             self.driver_of_self = device.get('ID_USB_DRIVER')
 
-        # ETHTOOL_GPERMADDR
-        address = subprocess.check_output([
-            'ethtool', '--show-permaddr', self.ifacename
-        ])
-        # TODO: regexp validate, and also 00:00:00:00:00:00, FF:FF:FF:FF:FF:FF, and also case-sensitivity
-        self.permaddr = address.rsplit(None, 1)[-1].upper()
-        self.debug = render_device(device)
 
-    @property
-    def ifacename(self):
+        self._fill_permaddr()
+        self._fill_drvinfo()
+        self.tpe = ThreadPoolExecutor(10)
+        self.start_identify()
+
+    # def get_runtime_info(self):
+    #     subprocess.check_call([
+    #         'ethtool', self._get_iface_name(),
+    #     ])
+
+    def _get_iface_name(self):
         """
-        Deprecated. We should use netlink monitoring for name changes...
+        :rtype : str
         """
-        req = array('c', cgifname_struct.pack('', self.index))
-        with closing(socket.socket()) as sk:
-            if fcntl.ioctl(sk.fileno(), SIOCGIFNAME, req, True):
-                raise RuntimeError('ioctl failed')
-        (name, idx) = cgifname_struct.unpack_from(req)
-        return name.rstrip(b'\x00')
+        # TODO: Should never be used. Also, re-create via netlink, and monitor that...
+        # generates race-condition, as interface name may be changed after calling this
+        # function and before using returned name
+        req = ifreq(ifr_ifindex=self.index)
+        if fcntl.ioctl(self.sk_fileno, SIOCGIFNAME, req, True):
+            raise RuntimeError('SIOCGIFNAME ioctl failed')
+        return req.ifr_name
 
+    def _do_ethtool(self, cmd):
+        iface = self._get_iface_name()
+        data = cast(byref(cmd), c_void_p)
 
+        req = ifreq(ifr_name=iface, ifr_data=data)
 
-    def identify(self, seconds=3):
+        if fcntl.ioctl(self.sk_fileno, SIOCETHTOOL, req, True):
+            raise RuntimeError('SIOCETHTOOL ioctl failed', cmd.cmd)
+
+    def _fill_permaddr(self):
         """
-        Blink led (if supported)
-        ethtool ETHTOOL_PHYS_ID
+        :rtype : str
         """
-        subprocess.check_call([
-            'ethtool', '--identify', self.ifacename, str(seconds)
-        ])
+        perm_addr = ethtool_perm_addr(cmd=ETHTOOL_GPERMADDR, size=ETH_ALEN)
+        self._do_ethtool(perm_addr)
+        if perm_addr.size != ETH_ALEN:
+            raise RuntimeError('Returned mac address is not %d bytes length', ETH_ALEN)
+        self.permaddr = ':'.join('{0:02X}'.format(bbb) for bbb in perm_addr.data[:perm_addr.size])
 
+    def _fill_drvinfo(self):
+        drv_info = ethtool_drvinfo(cmd=ETHTOOL_GDRVINFO)
+        self._do_ethtool(drv_info)
 
+        self.ethtool_driver = drv_info.driver
+        self.ethtool_driver_version = drv_info.version
+        self.ethtool_fw_version = drv_info.fw_version if drv_info.fw_version != 'N/A' else None
+        self.ethtool_bus_info = drv_info.bus_info
 
-    def get_runtime_info(self):
-        subprocess.check_call([
-            'ethtool', self.ifacename,
-        ])
+    def start_identify(self, seconds=3):
+        """
+        :type seconds: int
+
+        NOTE: this ioctl is blocking(!). Thanks to ethtool API.
+        So, will run in thread...
+        """
+        cmd = ethtool_value(cmd=ETHTOOL_PHYS_ID, data=seconds)
+
+        thread_name = 'if_{0}_wait'.format(self.index)
+
+        def async_identify():
+            sigset = SIGSET()
+            sigfillset(sigset)
+            pthread_sigmask(SIG_SETMASK, sigset, None)
+            prctl.set_name(thread_name)
+            self._do_ethtool(cmd)
+
+        thr = Thread(target=async_identify, name=thread_name)
+        thr.daemon = True
+        thr.start()
