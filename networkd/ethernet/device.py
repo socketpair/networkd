@@ -11,7 +11,6 @@ import fcntl
 import prctl
 import subprocess
 from threading import Thread
-from concurrent.futures import ThreadPoolExecutor
 from networkd.lowlevel.libc import ifreq, SIOCGIFNAME, SIOCETHTOOL, ETHTOOL_GPERMADDR, ETH_ALEN, ethtool_perm_addr, ETHTOOL_GDRVINFO, ethtool_drvinfo, ethtool_value, ETHTOOL_PHYS_ID, SIGSET, sigfillset, pthread_sigmask, SIG_SETMASK
 
 log = getLogger(__name__)
@@ -70,7 +69,7 @@ class PhysicalEthernet(object):
         """
         :type device: Device
         """
-        self.sk_fileno = SocketForIoctl().fileno()
+        self._sk_fileno = SocketForIoctl().fileno()
         self.index = device.asint('IFINDEX')
 
         #TODO: what if not exists in BD (!)
@@ -104,8 +103,7 @@ class PhysicalEthernet(object):
 
         self._fill_permaddr()
         self._fill_drvinfo()
-        self.tpe = ThreadPoolExecutor(10)
-        self.start_identify()
+        #self.start_identify()
 
     # def get_runtime_info(self):
     #     subprocess.check_call([
@@ -120,7 +118,7 @@ class PhysicalEthernet(object):
         # generates race-condition, as interface name may be changed after calling this
         # function and before using returned name
         req = ifreq(ifr_ifindex=self.index)
-        if fcntl.ioctl(self.sk_fileno, SIOCGIFNAME, req, True):
+        if fcntl.ioctl(self._sk_fileno, SIOCGIFNAME, req, True):
             raise RuntimeError('SIOCGIFNAME ioctl failed')
         return req.ifr_name
 
@@ -130,7 +128,7 @@ class PhysicalEthernet(object):
 
         req = ifreq(ifr_name=iface, ifr_data=data)
 
-        if fcntl.ioctl(self.sk_fileno, SIOCETHTOOL, req, True):
+        if fcntl.ioctl(self._sk_fileno, SIOCETHTOOL, req, True):
             raise RuntimeError('SIOCETHTOOL ioctl failed', cmd.cmd)
 
     def _fill_permaddr(self):
