@@ -11,28 +11,6 @@ from networkd.ethernet.device import PhysicalEthernet
 
 log = getLogger(__name__)
 
-# # hack for old udev library that lacks monitor.poll()
-# def get_udev_reader(monitor):
-#     if hasattr(monitor, 'poll'):
-#         # 0 - mean NONBLOCKING
-#         return partial(monitor.poll, 0)
-#
-#     def udev_event_reader():
-#         while 1:
-#             try:
-#                 device = pyudev.libudev.udev_monitor_receive_device(monitor)
-#             except EnvironmentError as err:
-#                 if err.args[0] in (errno.EAGAIN, errno.EWOULDBLOCK):
-#                     return
-#                 monitor._reraise_with_socket_path()
-#             # unreal case when return NULL, but errno=0
-#             if device is None:
-#                 log.debug('Device returned is None')
-#                 return
-#             yield device
-#     return udev_event_reader
-
-
 def upgrade_libudev():
     if not hasattr(pyudev.Monitor, 'poll'):
 
