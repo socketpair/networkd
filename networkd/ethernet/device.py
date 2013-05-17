@@ -63,12 +63,24 @@ class PhysicalEthernet(object):
         :type device: Device
         """
         self.index = device.asint('IFINDEX')
-        self.vendor = device.get('ID_VENDOR_FROM_DATABASE')
-        self.model = device.get('ID_MODEL_FROM_DATABASE')
+
+        #TODO: what if not exists in BD (!)
+        self.model1 = device.get('ID_MODEL_FROM_DATABASE')
+        self.vendor1 = device.get('ID_VENDOR_FROM_DATABASE')
+
+        self.model2 = device.get('ID_MODEL_ENC')
+        self.vendor2 = device.get('ID_VENDOR_ENC')
+
+        if self.model2:
+            self.model2 = self.model2.decode('string_escape')
+        if self.vendor2:
+            self.vendor2 = self.vendor2.decode('string_escape')
+
+        self.driver_of_parent = device.parent.driver
+        #self.driver = device.driver # always NULL
         self.bus = device.get('ID_BUS')
-        self.driver_direct = device.parent.driver
-        pci_device = device.find_parent('pci')
-        if pci_device is not None:
+        if self.bus == 'pci':
+            pci_device = device.find_parent('pci')
             self.pci_driver = pci_device.driver
             self.pci_id = pci_device.get('PCI_ID')
             self.pci_slot = pci_device.get('PCI_SLOT_NAME')
