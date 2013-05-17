@@ -55,13 +55,13 @@ def upgrade_subprocess():
 upgrade_subprocess()
 
 
-def render_device(device, show_parents=True):
+def generate_debuginfo(device, show_parents=True):
     retval = {
         'attrs': dict(((k, repr(device.attributes.get(k))) for k in device.attributes.iterkeys())),
         'dict': dict(device),
     }
     if show_parents:
-        retval['parents'] = dict(enumerate(render_device(parent, False) for parent in device.traverse()))
+        retval['parents'] = dict(enumerate(generate_debuginfo(parent, False) for parent in device.traverse()))
     return retval
 
 class PhysicalEthernet(object):
