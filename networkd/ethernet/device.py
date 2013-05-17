@@ -94,8 +94,11 @@ class PhysicalEthernet(object):
             self.pci_slot = pci_device.get('PCI_SLOT_NAME')
             self.pci_irq = pci_device.attributes.asint('irq')
         elif self.bus == 'usb':
-            usb_device = device.find_parent('usb')
             self.driver_of_self = device.get('ID_USB_DRIVER')
+            usb_device = device.find_parent('usb', 'usb_device')
+            self.usb_bMaxPower = usb_device.attributes['bMaxPower']
+            self.usb_speed = float(usb_device.attributes['speed'].strip("'"))
+            self.usb_version = float(usb_device.attributes['version'].strip("'").strip(' '))
 
 
         self._fill_permaddr()
