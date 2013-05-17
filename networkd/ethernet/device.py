@@ -9,6 +9,7 @@ from logging import getLogger
 import socket
 import fcntl
 import prctl
+import subprocess
 from threading import Thread
 from concurrent.futures import ThreadPoolExecutor
 from networkd.lowlevel.libc import ifreq, SIOCGIFNAME, SIOCETHTOOL, ETHTOOL_GPERMADDR, ETH_ALEN, ethtool_perm_addr, ETHTOOL_GDRVINFO, ethtool_drvinfo, ethtool_value, ETHTOOL_PHYS_ID, SIGSET, sigfillset, pthread_sigmask, SIG_SETMASK
