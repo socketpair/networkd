@@ -85,6 +85,9 @@ class PhysicalEthernet(object):
             self.pci_id = pci_device.get('PCI_ID')
             self.pci_slot = pci_device.get('PCI_SLOT_NAME')
             self.pci_irq = pci_device.attributes.asint('irq')
+        elif self.bus == 'usb':
+            usb_device = device.find_parent('usb')
+            self.driver_of_self = device.get('ID_USB_DRIVER')
 
         # ETHTOOL_GPERMADDR
         address = subprocess.check_output([
