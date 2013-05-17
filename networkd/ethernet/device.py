@@ -61,7 +61,7 @@ def generate_debuginfo(device, show_parents=True):
         'dict': dict(device),
     }
     if show_parents:
-        retval['parents'] = dict(enumerate(generate_debuginfo(parent, False) for parent in device.traverse()))
+        retval['parents'] = dict(enumerate(generate_debuginfo(parent, False) for parent in device.ancestors))
     return retval
 
 class PhysicalEthernet(object):

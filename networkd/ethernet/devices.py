@@ -34,7 +34,7 @@ def upgrade_libudev():
 
         pyudev.Monitor.poll = poll_copy
 
-    if not hasattr('Device', 'action'):
+    if not hasattr(Device, 'action'):
 
         from pyudev.core import libudev, ensure_unicode_string
 
@@ -44,8 +44,13 @@ def upgrade_libudev():
             if action:
                 return ensure_unicode_string(action)
 
-        Device.action = action_copy  # property(fget=lambda self: self.get('ACTION'))
+        Device.action = action_copy
 
+    if not hasattr(Device, 'ancestors'):
+        @property
+        def ancestors_copy(self):
+            return self.traverse()
+        Device.ancestors = ancestors_copy
 
 upgrade_libudev()
 
