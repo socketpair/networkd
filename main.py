@@ -10,6 +10,7 @@ bind connection of appropriate type to given devices
 periodically detect ip conflict, mac conflict
 periodically send gratuitous arp
 """
+import prctl
 
 from tornado import options
 from tornado.ioloop import IOLoop
@@ -19,6 +20,8 @@ from networkd.ethernet.devices import DeviceManager
 
 
 def main():
+    prctl.set_name('networkd_main')
+    prctl.set_proctitle('networkd')
     options.parse_command_line()
     dm = DeviceManager()
     application = Application([
