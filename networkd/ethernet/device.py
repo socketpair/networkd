@@ -5,15 +5,16 @@ event of changes
 bind connection of appropriate type to given devices
 """
 from ctypes import c_void_p, cast, byref
+from functools import partial
 from logging import getLogger
 import socket
 import fcntl
-import prctl
 import subprocess
-from threading import Thread
 
 from networkd.lowlevel.libc import ifreq, SIOCGIFNAME, SIOCETHTOOL, ETHTOOL_GPERMADDR, ETH_ALEN, ethtool_perm_addr, \
-    ETHTOOL_GDRVINFO, ethtool_drvinfo, ethtool_value, ETHTOOL_PHYS_ID, block_all_thread_signals
+    ETHTOOL_GDRVINFO, ethtool_drvinfo, ethtool_value, ETHTOOL_PHYS_ID
+from networkd.lowlevel.thread import NosignalingThread
+
 log = getLogger(__name__)
 
 # 'sysname': device.sys_name,
@@ -167,12 +168,7 @@ class PhysicalEthernet(object):
 
         thread_name = 'if_{0}_wait'.format(self.index)
 
-        def async_identify():
-            block_all_thread_signals()
-            prctl.set_name(thread_name)
-            self._do_ethtool(cmd)
-
-        thr = Thread(target=async_identify, name=thread_name)
+        thr = NosignalingThread(target=partial(self._do_ethtool, cmd), name=thread_name)
         thr.daemon = True
         thr.start()
 

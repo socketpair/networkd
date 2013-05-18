@@ -1,9 +1,7 @@
 # coding=utf-8
 
-from threading import Thread
 from time import sleep
-import prctl
-from networkd.lowlevel.libc import block_all_thread_signals
+from networkd.lowlevel.thread import NosignalingThread
 
 
 def qwe(values, speeds, newvalues):
@@ -17,14 +15,12 @@ class InterruptMonitor(object):
     def __init__(self):
         self.values = dict()
         self.speeds = dict()
-        thrd = Thread(target=self._inthread)
+        thrd = NosignalingThread(target=self._inthread, name='interrupts_mon')
         thrd.daemon = True
         self._thrd = thrd
         thrd.start()
 
     def _inthread(self):
-        block_all_thread_signals()
-        prctl.set_name('interrupts_mon')
         self.values = dict(self.read_interrupts())
         while 1:
             sleep(1)
