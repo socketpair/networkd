@@ -175,3 +175,9 @@ class PhysicalEthernet(object):
         thr = Thread(target=async_identify, name=thread_name)
         thr.daemon = True
         thr.start()
+
+    def close(self):
+        """
+        called when this interfce instance is not needed
+        Really, when device disappear from system
+        """
