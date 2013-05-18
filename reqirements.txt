@@ -1,0 +1,4 @@
+tornado
+pyudev
+lspci (pciutils?)
+prctl
