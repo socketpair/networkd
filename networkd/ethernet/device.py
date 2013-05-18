@@ -31,9 +31,10 @@ class SocketForIoctl(socket.SocketType):
 
     def __new__(cls, *args):
         if cls._instance is None:
-            log.debug('Creating %s instance', cls)
+            # log.debug('Creating %s instance', cls)
             cls._instance = super(SocketForIoctl, cls).__new__(cls, *args)
         return cls._instance
+
 
 def upgrade_subprocess():
     if hasattr(subprocess, 'check_output'):
@@ -54,10 +55,15 @@ def upgrade_subprocess():
 
     subprocess.check_output = _check_output
 
+
 upgrade_subprocess()
 
 
 def generate_debuginfo(device, show_parents=True):
+    """
+
+    :type device: Device
+    """
     retval = {
         'attrs': dict(((k, repr(device.attributes.get(k))) for k in device.attributes.iterkeys())),
         'dict': dict(device),
@@ -65,6 +71,7 @@ def generate_debuginfo(device, show_parents=True):
     if show_parents:
         retval['parents'] = dict(enumerate(generate_debuginfo(parent, False) for parent in device.ancestors))
     return retval
+
 
 class PhysicalEthernet(object):
     def __init__(self, device, imon):
@@ -104,7 +111,6 @@ class PhysicalEthernet(object):
             self.usb_speed = float(usb_device.attributes['speed'].strip("'"))
             self.usb_version = float(usb_device.attributes['version'].strip("'").strip(' '))
 
-
         self._fill_permaddr()
         self._fill_drvinfo()
         self._imon = imon
@@ -115,6 +121,7 @@ class PhysicalEthernet(object):
             yield ('iface_name', self._get_iface_name())
             if self.bus == 'pci':
                 yield ('interrupts_speed', self._imon.speeds.get(self.pci_irq, None))
+
         return dict(rrr())
 
     def _get_iface_name(self):
