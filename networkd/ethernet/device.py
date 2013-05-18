@@ -110,10 +110,11 @@ class PhysicalEthernet(object):
         #self.start_identify()
 
     def get_runtime_info(self):
-        return {
-            'iface_name': self._get_iface_name(),
-            'interrupts_speed': self._imon.speeds.get(self.pci_irq, None),
-        }
+        def rrr():
+            yield ('iface_name', self._get_iface_name())
+            if self.bus == 'pci':
+                yield ('interrupts_speed', self._imon.speeds.get(self.pci_irq, None))
+        return dict(rrr())
 
     def _get_iface_name(self):
         """
