@@ -16,7 +16,7 @@ from tornado import options
 from tornado.ioloop import IOLoop
 from tornado.web import Application
 from networkd.handlers.devices import DeviceInfoHandler, DeviceActionHandler, DevicesActionHandler
-from networkd.ethernet.devices import DeviceManager
+from networkd.ethernet.device_manager import DeviceManager
 
 
 def main():

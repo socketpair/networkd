@@ -1,4 +1,5 @@
 # coding=utf-8
+from datetime import timedelta
 from functools import partial
 from logging import getLogger
 import os
@@ -11,6 +12,7 @@ from networkd.ethernet.device import PhysicalEthernet
 from networkd.ethernet.interrupts import InterruptMonitor
 
 log = getLogger(__name__)
+
 
 def upgrade_libudev():
     if not hasattr(pyudev.Monitor, 'poll'):
@@ -51,19 +53,32 @@ def upgrade_libudev():
         @property
         def ancestors_copy(self):
             return self.traverse()
+
         Device.ancestors = ancestors_copy
+
+    if not hasattr(Device, 'sequence_number'):
+        @property
+        def sequence_number_copy(self):
+            return int(self.get('SEQNUM', 0))
+
+        Device.sequence_number = sequence_number_copy
+
 
 upgrade_libudev()
 
 
 class DeviceManager(object):
     def __init__(self):
-        log.debug('Creating ULOG context')
+        # log.debug('Creating ULOG context')
         log.debug(log.name)
         self.netdevices = dict()  # ifindex => MyDevice
 
         self.udev_version = pyudev.udev_version()
-        log.debug('Working against udev version %d', self.udev_version)
+        log.info('Working against udev version %d', self.udev_version)
+
+        # TODO: time_since_initialized  > 0?
+        if self.udev_version < 165:
+            raise RuntimeError('Too old udev version. is_initialized is not supported')
 
         self.context = pyudev.Context()
         self._start_background_udev_monitoring()
@@ -116,16 +131,41 @@ class DeviceManager(object):
             log.error('Error on monitoring socket. Stopping monitoring')
             IOLoop.instance().remove_handler(fd)
 
-    def _handle_device_event(self, device):
-        log.debug('Event: %r for %r', device.action, device)
+    def __inject_device(self, device):
+        """
+        :type device: Device
+        """
+        self.netdevices[device.asint('IFINDEX')] = PhysicalEthernet(device, self._interruptmonitor)
 
-        # we will ignore that. Wi will not use interface name at our job (races?)
-        # receiving events say that devices always uninitialized.
-        # TODO: think about a way to wait for device initialization
-        # if self.udev_version >= 165:
-        #     if not device.is_initialized:
-        #         log.debug('Skipping uninitialized device %r', device)
-        #         return
+    def _inject_device(self, device):
+        """
+        :type device: Device
+        """
+        if device.is_initialized:
+            self.__inject_device(device)
+            return
+
+        log.debug('Device is not initialized, so will wait in background')
+
+        device_path = device.device_path
+
+        #TODO: limit waiting time
+        def wait_for_initialized():
+            newdev = Device.from_path(self.context, device_path)
+            if newdev.is_initialized:
+                log.debug('Device is initialized now')
+                self.__inject_device(newdev)
+            else:
+                log.debug('Device still not initialized. continue to wait')
+                IOLoop.instance().add_timeout(timedelta(seconds=0.1), wait_for_initialized)
+
+        wait_for_initialized()
+
+    def _handle_device_event(self, device):
+        """
+        :type device: Device
+        """
+        # log.debug('Event: %r for %r', device.action, device)
 
         ifindex = device.get('IFINDEX', None)
         if ifindex is None:
@@ -137,15 +177,15 @@ class DeviceManager(object):
             log.debug('Skipping device without parent (non-hardware), %r', device)
             return
 
-        devtype = device.device_type
-        if devtype is not None:
-            log.debug('Device %r have type %r, so skipped', device, devtype)
-            return
+        # devtype = device.device_type
+        # if devtype is not None:
+        #     log.debug('Device %r have type %r, so skipped', device, devtype)
+        #     return
 
         action = device.action
         # TODO: add may appear AFTER coldplug, this is OK (races)
         if (action is None) or (action == u'add'):
-            self.netdevices[ifindex] = PhysicalEthernet(device, self._interruptmonitor)
+            self._inject_device(device)
             return
 
         if action == u'remove':
@@ -168,6 +208,7 @@ class DeviceManager(object):
     def get_device(self, index):
         """
 
+        :type index: int
         :rtype : PhysicalEthernet
         """
         return self.netdevices[index]
