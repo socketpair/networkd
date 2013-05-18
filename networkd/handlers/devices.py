@@ -3,7 +3,13 @@ from networkd.handlers.common import CommonHandler
 
 
 def _render_device(device1):
+    """
+    :type device1: PhysicalEthernet
+    """
     def rrr(device):
+        """
+        :type device: PhysicalEthernet
+        """
         for name in dir(device):
             if name.startswith('_'):
                 continue
@@ -11,6 +17,7 @@ def _render_device(device1):
             if callable(attr):
                 continue
             yield (name, attr)
+        yield ('RUNTIME', device1.get_runtime_info())
     return dict(rrr(device1))
 
 

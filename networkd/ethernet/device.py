@@ -66,8 +66,10 @@ def generate_debuginfo(device, show_parents=True):
     return retval
 
 class PhysicalEthernet(object):
-    def __init__(self, device):
+    def __init__(self, device, imon):
         """
+
+        :type imon: InterruptMonitor
         :type device: Device
         """
         self._sk_fileno = SocketForIoctl().fileno()
@@ -104,12 +106,14 @@ class PhysicalEthernet(object):
 
         self._fill_permaddr()
         self._fill_drvinfo()
+        self._imon = imon
         #self.start_identify()
 
-    # def get_runtime_info(self):
-    #     subprocess.check_call([
-    #         'ethtool', self._get_iface_name(),
-    #     ])
+    def get_runtime_info(self):
+        return {
+            'iface_name': self._get_iface_name(),
+            'interrupts_speed': self._imon.speeds.get(self.pci_irq, None),
+        }
 
     def _get_iface_name(self):
         """

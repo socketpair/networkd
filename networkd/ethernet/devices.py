@@ -8,6 +8,7 @@ import fcntl
 from tornado.ioloop import IOLoop
 from tornado.platform.auto import set_close_exec
 from networkd.ethernet.device import PhysicalEthernet
+from networkd.ethernet.interrupts import InterruptMonitor
 
 log = getLogger(__name__)
 
@@ -66,7 +67,11 @@ class DeviceManager(object):
 
         self.context = pyudev.Context()
         self._start_background_monitoring()
+        self._start_interrupt_monitoring()
         self.rescan_devices()
+
+    def _start_interrupt_monitoring(self):
+        self._interruptmonitor = InterruptMonitor()
 
     def rescan_devices(self):
         olddevices = self.netdevices
@@ -140,7 +145,7 @@ class DeviceManager(object):
         action = device.action
         # TODO: add may appear AFTER coldplug, this is OK (races)
         if (action is None) or (action == u'add'):
-            self.netdevices[ifindex] = PhysicalEthernet(device)
+            self.netdevices[ifindex] = PhysicalEthernet(device, self._interruptmonitor)
             return
 
         if action == u'remove':
