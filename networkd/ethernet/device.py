@@ -11,8 +11,9 @@ import fcntl
 import prctl
 import subprocess
 from threading import Thread
-from networkd.lowlevel.libc import ifreq, SIOCGIFNAME, SIOCETHTOOL, ETHTOOL_GPERMADDR, ETH_ALEN, ethtool_perm_addr, ETHTOOL_GDRVINFO, ethtool_drvinfo, ethtool_value, ETHTOOL_PHYS_ID, SIGSET, sigfillset, pthread_sigmask, SIG_SETMASK
 
+from networkd.lowlevel.libc import ifreq, SIOCGIFNAME, SIOCETHTOOL, ETHTOOL_GPERMADDR, ETH_ALEN, ethtool_perm_addr, \
+    ETHTOOL_GDRVINFO, ethtool_drvinfo, ethtool_value, ETHTOOL_PHYS_ID, block_all_thread_signals
 log = getLogger(__name__)
 
 # 'sysname': device.sys_name,
@@ -162,9 +163,7 @@ class PhysicalEthernet(object):
         thread_name = 'if_{0}_wait'.format(self.index)
 
         def async_identify():
-            sigset = SIGSET()
-            sigfillset(sigset)
-            pthread_sigmask(SIG_SETMASK, sigset, None)
+            block_all_thread_signals()
             prctl.set_name(thread_name)
             self._do_ethtool(cmd)
 
