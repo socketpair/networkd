@@ -21,17 +21,16 @@ def _render_device(device1):
     return dict(rrr(device1))
 
 
-class DevicesHandler(CommonHandler):
+class DeviceInfoHandler(CommonHandler):
     # noinspection PyMethodOverriding
     def initialize(self, ethmanager):
         """
         :type ethmanager: DeviceManager
         """
-        super(DevicesHandler, self).initialize()
+        super(DeviceInfoHandler, self).initialize()
         self.manager = ethmanager
 
-
-    def get(self, ifindex=None, action=None):
+    def get(self, ifindex=None):
         manager = self.manager
 
         if ifindex:
@@ -48,4 +47,53 @@ class DevicesHandler(CommonHandler):
         self.finish({
             'status': 'ok',
             'items': items,
+        })
+
+
+class DevicesActionHandler(CommonHandler):
+    # noinspection PyMethodOverriding
+    def initialize(self, ethmanager):
+        """
+        :type ethmanager: DeviceManager
+        """
+        super(DevicesActionHandler, self).initialize()
+        self.manager = ethmanager
+
+    def get(self, action=None):
+        manager = self.manager
+
+        if action == 'rescan':
+            manager.rescan_devices()
+        else:
+            raise ValueError('No such action', action)
+
+        self.finish({
+            'status': 'ok',
+        })
+
+
+class DeviceActionHandler(CommonHandler):
+    # noinspection PyMethodOverriding
+    def initialize(self, ethmanager):
+        """
+        :type ethmanager: DeviceManager
+        """
+        super(DeviceActionHandler, self).initialize()
+        self.manager = ethmanager
+
+    def get(self, ifindex=None, action=None):
+        manager = self.manager
+
+        device = manager.get_device(int(ifindex))
+
+        if action == 'identify':
+            # TODO: catch exception (!)
+            # And more, check if identification is not supported (probe? flags?)
+            # report that in properties of this device
+            device.start_identify(3)
+        else:
+            raise ValueError('No such action', action)
+
+        self.finish({
+            'status': 'ok',
         })

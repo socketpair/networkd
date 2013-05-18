@@ -166,4 +166,8 @@ class DeviceManager(object):
         return self.netdevices.itervalues()
 
     def get_device(self, index):
+        """
+
+        :rtype : PhysicalEthernet
+        """
         return self.netdevices[index]
