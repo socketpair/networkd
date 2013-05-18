@@ -66,7 +66,7 @@ class DeviceManager(object):
         log.debug('Working against udev version %d', self.udev_version)
 
         self.context = pyudev.Context()
-        self._start_background_monitoring()
+        self._start_background_udev_monitoring()
         self._start_interrupt_monitoring()
         self.rescan_devices()
 
@@ -91,7 +91,7 @@ class DeviceManager(object):
         if removed:
             log.debug('Scan: %d devices disappear', len(removed))
 
-    def _start_background_monitoring(self):
+    def _start_background_udev_monitoring(self):
         monitor = pyudev.Monitor.from_netlink(self.context, 'udev')
         monitor.filter_by(subsystem='net')
         monitor.start()
