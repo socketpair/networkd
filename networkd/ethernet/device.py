@@ -26,14 +26,11 @@ log = getLogger(__name__)
 # 'hwaddr?': device.attributes['address'], # NO! current address (not real hwaddr... )
 
 
-class SocketForIoctl(socket.SocketType):
-    _instance = None
-
-    def __new__(cls, *args):
-        if cls._instance is None:
-            # log.debug('Creating %s instance', cls)
-            cls._instance = super(SocketForIoctl, cls).__new__(cls, *args)
-        return cls._instance
+def SocketForIoctl():
+    instance = getattr(SocketForIoctl, '_instance', None)
+    if instance is None:
+        SocketForIoctl._instance = instance = socket.socket()
+    return instance
 
 
 def upgrade_subprocess():
