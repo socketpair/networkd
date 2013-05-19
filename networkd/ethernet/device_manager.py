@@ -1,5 +1,4 @@
 # coding=utf-8
-from datetime import timedelta
 from functools import partial
 from logging import getLogger
 import os
@@ -77,8 +76,6 @@ class DeviceManager(object):
         log.info('Working against udev version %d', self.udev_version)
 
         # TODO: time_since_initialized  > 0?
-        if self.udev_version < 165:
-            raise RuntimeError('Too old udev version. is_initialized is not supported')
 
         self.context = pyudev.Context()
         self._start_background_udev_monitoring()
@@ -131,42 +128,13 @@ class DeviceManager(object):
             log.error('Error on monitoring socket. Stopping monitoring')
             IOLoop.instance().remove_handler(fd)
 
-    def __inject_device(self, device):
-        """
-        :type device: Device
-        """
-        self.netdevices[device.asint('IFINDEX')] = PhysicalEthernet(device, self._interruptmonitor)
-
-    def _inject_device(self, device):
-        """
-        :type device: Device
-        """
-        if device.is_initialized:
-            self.__inject_device(device)
-            return
-
-        log.debug('Device is not initialized, so will wait in background')
-
-        device_path = device.device_path
-
-        #TODO: limit waiting time
-        def wait_for_initialized():
-            newdev = Device.from_path(self.context, device_path)
-            if newdev.is_initialized:
-                log.debug('Device is initialized now')
-                self.__inject_device(newdev)
-            else:
-                log.debug('Device still not initialized. continue to wait')
-                IOLoop.instance().add_timeout(timedelta(seconds=0.1), wait_for_initialized)
-
-        wait_for_initialized()
-
     def _handle_device_event(self, device):
         """
         :type device: Device
         """
         # log.debug('Event: %r for %r', device.action, device)
 
+        #TODO: udev_device_get_ifindex
         ifindex = device.get('IFINDEX', None)
         if ifindex is None:
             log.debug('Skipping device without IFINDEX %r', device)
@@ -183,9 +151,21 @@ class DeviceManager(object):
         #     return
 
         action = device.action
+
         # TODO: add may appear AFTER coldplug, this is OK (races)
         if (action is None) or (action == u'add'):
-            self._inject_device(device)
+
+            if self.udev_version >= 165:
+                # TODO: handle udev's initializations errors instead of raise
+                if not device.is_initialized:
+                    device = Device.from_path(self.context, device.device_path)
+                    if not device.is_initialized:
+                        raise Exception('Double-getting device still not initializd')
+            else:
+                device = Device.from_path(self.context, device.device_path)
+
+            #TODO: udev_device_get_ifindex
+            self.netdevices[ifindex] = PhysicalEthernet(device, self._interruptmonitor)
             return
 
         if action == u'remove':
