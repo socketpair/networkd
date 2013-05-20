@@ -158,7 +158,9 @@ class DeviceManager(object):
             if self.udev_version >= 165:
                 # TODO: handle udev's initializations errors instead of raise
                 if not device.is_initialized:
-                    device = Device.from_path(self.context, device.device_path)
+                    device_path = device.device_path
+                    log.debug('Device is not initialized. re-reading %s', device_path)
+                    device = Device.from_path(self.context, device_path)
                     if not device.is_initialized:
                         raise Exception('Double-getting device still not initializd')
             else:
