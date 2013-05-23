@@ -20,6 +20,7 @@ from networkd.ethernet.device_manager import DeviceManager
 
 
 def main():
+    # noinspection PyUnresolvedReferences
     prctl.set_name('networkd_main')
     prctl.set_proctitle('networkd')
     options.parse_command_line()

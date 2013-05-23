@@ -1,15 +1,12 @@
 # coding=utf-8
 
-"""
-event of changes
-bind connection of appropriate type to given devices
-"""
 from ctypes import c_void_p, cast, byref
 from functools import partial
 from logging import getLogger
 import socket
 import fcntl
 import subprocess
+from networkd.ethernet.interrupts import RuntimeMonitor
 
 from networkd.lowlevel.libc import ifreq, SIOCGIFNAME, SIOCETHTOOL, ETHTOOL_GPERMADDR, ETH_ALEN, ethtool_perm_addr, \
     ETHTOOL_GDRVINFO, ethtool_drvinfo, ethtool_value, ETHTOOL_PHYS_ID
@@ -58,24 +55,23 @@ upgrade_subprocess()
 
 def generate_debuginfo(device, show_parents=True):
     """
-
-    :type device: Device
+    :type device: pyudev.Device
     """
     retval = {
         'attrs': dict(((k, repr(device.attributes.get(k))) for k in device.attributes.iterkeys())),
         'dict': dict(device),
     }
     if show_parents:
-        retval['parents'] = dict(enumerate(generate_debuginfo(parent, False) for parent in device.ancestors))
+        # noinspection PyUnresolvedReferences
+        ancestors = device.ancestors
+        retval['parents'] = list(generate_debuginfo(parent, False) for parent in ancestors)
     return retval
 
 
 class PhysicalEthernet(object):
-    def __init__(self, device, imon):
+    def __init__(self, device):
         """
-
-        :type imon: InterruptMonitor
-        :type device: Device
+        :type device: pyudev.Device
         """
         self._sk_fileno = SocketForIoctl().fileno()
         self.index = device.asint('IFINDEX')
@@ -110,14 +106,14 @@ class PhysicalEthernet(object):
 
         self._fill_permaddr()
         self._fill_drvinfo()
-        self._imon = imon
+        self._runtime_monitor = RuntimeMonitor.instance()
         #self.start_identify()
 
     def get_runtime_info(self):
         def rrr():
             yield ('iface_name', self._get_iface_name())
             if self.bus == 'pci':
-                yield ('interrupts_speed', self._imon.speeds.get(self.pci_irq, None))
+                yield ('interrupts_speed', self._runtime_monitor.interrupts.speeds.get(self.pci_irq, None))
 
         return dict(rrr())
 

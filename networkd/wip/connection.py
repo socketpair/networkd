@@ -15,6 +15,7 @@ perform link detection (ping, TCP)
 # v = v*0.9 + v1 #
 #
 
+
 class EthernetConnection(object):
     def connect(self, device, config):
         pass

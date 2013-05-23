@@ -8,7 +8,7 @@ import fcntl
 from tornado.ioloop import IOLoop
 from tornado.platform.auto import set_close_exec
 from networkd.ethernet.device import PhysicalEthernet
-from networkd.ethernet.interrupts import InterruptMonitor
+from networkd.ethernet.interrupts import RuntimeMonitor
 
 log = getLogger(__name__)
 
@@ -83,7 +83,7 @@ class DeviceManager(object):
         self.rescan_devices()
 
     def _start_interrupt_monitoring(self):
-        self._interruptmonitor = InterruptMonitor()
+        self._interruptmonitor = RuntimeMonitor()
 
     def rescan_devices(self):
         olddevices = self.netdevices
@@ -150,6 +150,7 @@ class DeviceManager(object):
         #     log.debug('Device %r have type %r, so skipped', device, devtype)
         #     return
 
+        # noinspection PyUnresolvedReferences
         action = device.action
 
         # TODO: add may appear AFTER coldplug, this is OK (races)
@@ -167,7 +168,7 @@ class DeviceManager(object):
                 device = Device.from_path(self.context, device.device_path)
 
             #TODO: udev_device_get_ifindex
-            self.netdevices[ifindex] = PhysicalEthernet(device, self._interruptmonitor)
+            self.netdevices[ifindex] = PhysicalEthernet(device)
             return
 
         if action == u'remove':

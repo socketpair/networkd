@@ -123,6 +123,7 @@ sigfillset.errcheck = std_errno_check
 
 
 def block_all_thread_signals():
+    # noinspection PyCallingNonCallable
     sigset = SIGSET()
     sigfillset(sigset)
     pthread_sigmask(SIG_SETMASK, sigset, None)
